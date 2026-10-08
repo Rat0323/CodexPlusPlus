@@ -9,6 +9,7 @@ use serde_json::{Value, json};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 use wiremock::matchers::method;
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
@@ -249,6 +250,53 @@ async fn repeated_exact_validation_rejection_never_retries_more_than_once() {
         "negotiation has a whole-request retry budget"
     );
     assert_function_bridge(&received[1].body_json::<Value>().unwrap(), &original);
+}
+
+#[tokio::test]
+async fn first_rejected_400_honors_configured_cooldown_before_exec_retry() {
+    let _lock = settings_path_test_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let server = MockServer::start().await;
+    let mut settings = TestSettings::new(&server);
+    settings.settings.relay_profiles[0].rate_limit_cooldown_enabled = true;
+    settings.settings.relay_profiles[0].cooldown_error_statuses = vec![400];
+    Mock::given(method("POST"))
+        .respond_with(move |incoming: &Request| {
+            let body = incoming.body_json::<Value>().unwrap();
+            if is_custom_exec(&body) {
+                exec_rejection().insert_header("Retry-After", "1")
+            } else {
+                ResponseTemplate::new(200).set_body_json(function_response(
+                    &json!({"input": PROGRAM}).to_string(),
+                    "call_cooldown",
+                ))
+            }
+        })
+        .mount(&server)
+        .await;
+
+    let started = Instant::now();
+    let result = tokio::time::timeout(
+        Duration::from_secs(1),
+        open_responses_proxy_request_with_settings_for_path(
+            &request("gpt-5.6-luna").to_string(),
+            settings.settings.clone(),
+            "/v1/responses",
+        ),
+    )
+    .await;
+    assert!(
+        result.is_err(),
+        "compatibility retry must wait for the first 400 cooldown"
+    );
+    assert!(started.elapsed() >= Duration::from_secs(1));
+    let received = server.received_requests().await.unwrap();
+    assert_eq!(
+        received.len(),
+        1,
+        "the compatibility retry must not be sent during cooldown"
+    );
 }
 
 #[tokio::test]
