@@ -1,53 +1,42 @@
 # Image overlay regressions
 
-Run the browser suites with Node and locally available Playwright, Sharp and PNGJS.
-Use NODE_PATH for an existing external dependency directory. The shared fixture
-accepts CODEX_TEST_BROWSER_PATH or CODEX_TEST_BROWSER (default: msedge).
+Run with Node and locally available Playwright, Sharp and PNGJS. NODE_PATH can
+point at an existing dependency directory; no installation is required when these
+are already available. The browser defaults to msedge; override with
+CODEX_TEST_BROWSER or CODEX_TEST_BROWSER_PATH.
 
-- node scripts/test-image-overlay.cjs: shared lifecycle, pixel and interaction cases.
-- node scripts/test-image-native-media.cjs: transparent images, fit/zoom, backdrop
-  composition, frozen-JavaScript scrolling and native view-transition snapshots.
-- node scripts/test-image-composite.cjs: whole-frame comparison against the original
-  fixed-DIV wallpaper, ordinary iframe/shadow content, video/canvas and resource lifetime.
-- node scripts/test-background-resume.cjs: scan scheduler suspension and coalescing.
-- node scripts/test-session-action-layout.cjs: sidebar layout read/write batching.
+- node scripts/test-image-overlay.cjs: opt-in, image clearing, repeated installation,
+  source/opacity changes, legacy defaults, resizing, typing, attachment deletion,
+  scrolling and native DOM/animation/guest ownership.
+- node scripts/test-image-native-media.cjs: image/SVG/canvas/video/popup/badge
+  composition at three opacity and three zoom values; click-through, disable and
+  late media during scrolling.
+- node scripts/test-image-composite.cjs: whole-frame patterned wallpaper comparisons.
+  Five fit modes cover no transform, translate:0, translate:-154px and
+  transform:translateX(-154px). Additional zoom cases exercise intermediate sidebar
+  positions, composer growth and viewport resizing.
+- node scripts/test-background-resume.cjs and node scripts/test-session-action-layout.cjs:
+  independent scan scheduler and sidebar layout tests.
 
-The shared suite replaces the overlapping composer-menu, consolidation, layer-order,
-live-surfaces, popup-first-paint/material/paint, refactor-regressions, review-sidebar,
-rework-surfaces, runtime-work, stable-composer, thread-performance and viewer-scroll
-scripts. Related steps now share one fixture and verify their combined lifecycle.
+The current implementation deliberately restores the old full-window image layer.
+Wallpapers tint native media and ordinary popups too; full opacity can hide content.
+pointer-events:none preserves input delivery, not native pixel colors. The media
+suite asserts this composition explicitly instead of expecting the retired regional
+implementation's media promotion, per-control SVG filters or popup protection.
 
-Coverage includes native composer geometry and editable text; opaque attachments
-and clickable deletion; roleless input menus above review cards; popup alpha under
-nested previews, theme changes and reparenting; browser/native extension boundaries;
-inactive right-pane retirement; LTR/RTL scrollbar hit testing; image reentry, late
-viewer registration and stale observer callbacks; streamed text and bounded layout
-work; sidebar hover suppression during scrolling; background pause/resume.
+The shared fixture decodes the URL actually used by the overlay, then waits for
+rendering. It does not fabricate ready, resource, cleanup or work-stat interfaces.
+Disabling goes through the production configuration path. Each case checks page
+errors and runs in its own browser page.
 
-Native-boundary regressions cover mention node-view ownership, footer occlusion,
-bottom-aligned submenu transforms, browser containment/animated bounds, icon badges
-and overlapping logo stacks, plus extension widgets above the composer. Composer
-contents retain native stacking and shadows; their background uses a static paint
-plane without per-control SVGs. Overlay layers 1000-1003 sit below extension widgets;
-Codex++ full-page shells retain their own native layer and wallpaper background.
+The rollback replaces tests specific to the removed regional painting machinery:
+observer/cache work counts, SVG primitive reuse, regional material registration and
+native-media color protection. Native layout, interactions, image composition and
+reversibility remain covered by the suites above. These fixtures do not claim
+real-app FPS, cross-platform GPU coverage or full installed-app acceptance.
 
-Each shared case checks JavaScript errors, reversibility, released observers and
-unchanged native animation APIs. Pixel tolerance remains one channel value.
-These browser fixtures verify rendering contracts and work counts, not real App FPS.
-
-Navigation regressions model both native browser hosts and hidden/visible reparenting,
-with guest pixels and application header controls checked after each navigation.
-Sticky page headers retain their native fades, backing geometry and top insets,
-and occlude scrolling icons. Transparent headers do not receive a second wallpaper;
-opaque native backing uses static CSS backgrounds, including native pseudo-elements.
-Dark/light theme changes and patterned wallpaper remain aligned across header edges.
-The below-composer home action bar reveals the global wallpaper without repainting
-inside its animated transform; the above-composer project bar keeps its native paint.
-True-bottom reverse scrolling must reuse SVG primitives and existing stylesheets.
-
-The overlay, native-media and composite suites share image loading, installation
-and pixel helpers. Native-media retains its original device scale and fit matrices.
-Sidebar comparison embeds the frozen upstream per-row algorithm; ordinary runs
-need no private Git commits. CODEX_OVERLAY_BASELINE optionally selects a local
-revision for comparisons. Cached-backdrop allocation, batched stylesheet commits
-and pending-scan coalescing have explicit work-count assertions.
+For a reproducible pre-fix RED on the same fixtures:
+CODEX_OVERLAY_BASELINE=be6162a node scripts/test-image-composite.cjs
+(use the equivalent environment assignment in PowerShell). The transformed-footer
+cases must fail; the current source must pass with the same one-channel tolerance.
+CODEX_OVERLAY_CANDIDATE_FUNCTION can load a temporary source copy for mutation checks.

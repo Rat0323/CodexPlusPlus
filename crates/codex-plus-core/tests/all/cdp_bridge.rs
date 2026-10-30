@@ -812,23 +812,24 @@ process.exit(0);
 fn injection_script_installs_image_overlay_from_data_uri() {
     let script = assets::injection_script(57321);
 
-    assert!(script.contains("typeof config.dataUrl === \"string\""));
     assert!(script.contains("overlay.id = codexPlusImageOverlayId"));
     let overlay_script = script
         .split("function installCodexPlusImageOverlay()")
         .nth(1)
         .and_then(|body| body.split("function scheduleCodexPlusImageOverlay()").next())
         .expect("image overlay entry point should be embedded");
-    assert!(overlay_script.contains("data-codex-plus-image-native"));
-    assert!(overlay_script.contains("root.insertBefore(overlay, document.body"));
+    assert!(overlay_script.contains("const source = config.dataUrl || \"\""));
+    assert!(overlay_script.contains("if (!config.enabled || !source)"));
+    assert!(overlay_script.contains("root.appendChild(overlay)"));
+    assert!(!overlay_script.contains("data-codex-plus-image-native"));
+    assert!(!overlay_script.contains("background-attachment:fixed"));
     assert!(!overlay_script.contains("maskImage"));
     assert!(!overlay_script.contains("ScrollTimeline"));
     assert!(!overlay_script.contains("cloneNode"));
-    assert!(script.contains("URL.createObjectURL(new Blob([bytes], { type: data[1] }))"));
-    assert!(script.contains("image.src = resource.imageSource"));
+    assert!(overlay_script.contains("backgroundImage: `url(\"${source.replace"));
     assert!(!script.contains("JSON.stringify(source)"));
-    assert!(overlay_script.contains("zIndex: String(wallpaperLayer)"));
-    assert!(script.contains("pointerEvents: \"none\""));
+    assert!(overlay_script.contains("zIndex: \"2147483646\""));
+    assert!(overlay_script.contains("pointerEvents: \"none\""));
     assert!(!script.contains("codexPlusImageOverlayTransparentTargetSelector"));
     assert!(!script.contains("function installCodexPlusImageOverlayForeground"));
     assert!(script.contains(
